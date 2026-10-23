@@ -14,56 +14,74 @@ base_dir = "/home/dirk/NOBINFBACKUP/data/gastruloid_tchic_counts"
 gtf_path = "/home/dirk/NOBINFBACKUP/references/mm39/gencode.vM39.annotation.gtf.gz"
 
 # --- LOADING DATA ---
-adata = sc.read_h5ad(
+adata_H3K27me3 = sc.read_h5ad(
     f"{base_dir}/gast_H3K27me3_2000_bins_ctype.h5ad"
 )
+adata_H3K4me3 = sc.read_h5ad(
+    f"{base_dir}/gast_H3K4me3_2000_bins_ctype.h5ad"
+)
 
-# --- EXPLORING ANNDATA OBJECT ---
-
+# --- EXPLORING ANNDATA OBJECT FOR H3K27me3 ---
 print("object overview:\n")
-print(adata)
+print(adata_H3K27me3)
 
 print("\nMatrix information:")
-print("Shape:", adata.X.shape)
-print("Storage type:", type(adata.X))
-print("Sparse matrix:", sparse.issparse(adata.X))
-print("Data type:", adata.X.dtype)
+print("Shape:", adata_H3K27me3.X.shape)
+print("Storage type:", type(adata_H3K27me3.X))
+print("Sparse matrix:", sparse.issparse(adata_H3K27me3.X))
+print("Data type:", adata_H3K27me3.X.dtype)
 
 print("\nObservation metadata:")
-print(adata.obs.head())
+print(adata_H3K27me3.obs.head())
 
 print("\nVariable metadata:")
-print(adata.var.head())
+print(adata_H3K27me3.var.head())
 
 print("\nFirst 5 observation names:")
-print(adata.obs_names[:5])
+print(adata_H3K27me3.obs_names[:5])
 
 print("\nFirst 5 variable names:")
-print(adata.var_names[:5])
+print(adata_H3K27me3.var_names[:5])
 
 # Convert adata.var into a dataframe with explicit columns
-var_df = adata.var.copy()
+var_H3K27me3_df = adata_H3K27me3.var.copy()
+var_H3K4me3_df = adata_H3K27me3.var.copy()
 
-# --- SAVE DATAFRAME AS CSV (successfully created once)---
+# --- SAVE DATAFRAME AS CSV (already successfully created once)---
+var_H3K27me3_df.to_csv(
+    "/home/dirk/NOBINFBACKUP/data/gastruloid_tchic_counts/var_H3K27me3.csv",
+    index=True,
+    index_label="var_index"
+)
+print("var_df.head:\n", var_H3K27me3_df.head())
 
-# var_df.to_csv(
-#     "/home/dirk/NOBINFBACKUP/data/gastruloid_tchic_counts/var.csv",
-#     index=True,
-#     index_label="var_index"
-# )
-#
-# print("var_df.head:\n", var_df.head())
+var_H3K4me3_df.to_csv(
+    "/home/dirk/NOBINFBACKUP/data/gastruloid_tchic_counts/var_H3K4me3.csv",
+    index=True,
+    index_label="var_index"
+)
+print("var_df.head:\n", var_H3K4me3_df.head())
 
-var_df.index.name = "var_index"
-var_df = var_df.reset_index()
+
+var_H3K27me3_df.index.name = "var_index"
+var_H3K27me3_df = var_H3K27me3_df.reset_index()
 # Standardize coordinate column names for PyRanges
-intervals_df = var_df.rename(columns={
+intervals_H3K27me3_df = var_H3K27me3_df.rename(columns={
     "chrom": "Chromosome",
     "start": "Start",
     "end": "End"
 })
+intervals_H3K27me3 = pr.PyRanges(intervals_H3K27me3_df)
 
-intervals = pr.PyRanges(intervals_df)
+var_H3K4me3_df.index.name = "var_index"
+var_H3K4me3_df = var_H3K4me3_df.reset_index()
+# Standardize coordinate column names for PyRanges
+intervals_H3K4me3_df = var_H3K4me3_df.rename(columns={
+    "chrom": "Chromosome",
+    "start": "Start",
+    "end": "End"
+})
+intervals_H3K4me3 = pr.PyRanges(intervals_H3K4me3_df)
 
 # --- LOAD MOUSE REFERENCE GENOME ---
 # Load the GTF annotation
@@ -72,6 +90,7 @@ gtf_columns = [
     "Score", "Strand", "Attribute"
 ]
 
+# Reading reference genome genes in chunks:
 gene_chunks = []
 
 for chunk in pd.read_csv(
@@ -116,33 +135,45 @@ for chunk in pd.read_csv(
 genes_df = pd.concat(gene_chunks, ignore_index=True)
 genes = pr.PyRanges(genes_df)
 
-print("Annotated genes:", len(genes))
+print("Annotated genes:", len(genes))                               ### 78289
 print(genes.df.head())
 
-print("Input intervals:", len(intervals))
-print("Annotated genes:", len(genes))
-print(intervals.df.head())
+print("Input intervals H3K27me3:", len(intervals_H3K27me3))         ### 1364141
+print(intervals_H3K27me3.df.head())
+print("Input intervals H3K4me3:", len(intervals_H3K4me3))           ### 1364141
+print(intervals_H3K4me3.df.head())
+
 print(genes.df.head())
 
 # --- FIND OVERLAPPING GENES ---
+overlaps_H3K27me3 = intervals_H3K27me3.join(genes)
+overlaps_H3K27me3_df = overlaps_H3K27me3.df
 
-overlaps = intervals.join(genes)
+overlaps_H3K4me3 = intervals_H3K4me3.join(genes)
+overlaps_H3K4me3_df = overlaps_H3K4me3.df
 
-overlaps_df = overlaps.df
+print("Number of interval-gene overlap pairs (H3K27me3):", len(overlaps_H3K27me3_df))   ### 938147
+print(overlaps_H3K27me3_df.head())
+print("Number of interval-gene overlap pairs (H3K4me3):", len(overlaps_H3K4me3_df))     ### 938147
+print(overlaps_H3K4me3_df.head())
 
-print("Number of interval-gene overlap pairs:", len(overlaps_df))
-print(overlaps_df.head())
-
-overlaps_df.to_csv(
-    f"{base_dir}/interval_gene_overlaps_mm39.csv",
+overlaps_H3K27me3_df.to_csv(
+    f"{base_dir}/interval_gene_overlaps_mm39_H3K27me3.csv",
+    index=False
+)
+overlaps_H3K4me3_df.to_csv(
+    f"{base_dir}/interval_gene_overlaps_mm39_H3K4me3.csv",
     index=False
 )
 
 # --- Count how many genes overlap each interval ---
-
-interval_gene_counts = intervals.count_overlaps(genes).df
-
+interval_gene_counts = intervals_H3K27me3.count_overlaps(genes).df
 interval_gene_counts.to_csv(
-    f"{base_dir}/interval_gene_counts_mm39.csv",
+    f"{base_dir}/interval_gene_counts_mm39_H3K27me3.csv",
+    index=False
+)
+interval_gene_counts = intervals_H3K4me3.count_overlaps(genes).df
+interval_gene_counts.to_csv(
+    f"{base_dir}/interval_gene_counts_mm39_H3K4me3.csv",
     index=False
 )
